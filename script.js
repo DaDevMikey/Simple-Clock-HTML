@@ -1,308 +1,499 @@
-class ClockApp {
+class TemporalOrchestrator {
   constructor() {
-    this.currentMode = 'clock';
-    this.isRunning = false;
-    this.time = 0;
-    this.interval = null;
+    this.activeVoyage = 'timepiece';
+    this.chroniclerActive = false;
+    this.countdownActive = false;
+    this.elapsedTicks = 0;
+    this.remainingTicks = 0;
+    this.rafHandle = null;
+    this.lastFrameStamp = 0;
+    this.realmEngaged = false;
+    this.cursorFadeTimer = null;
     
-    this.initTheme();
-    this.initNavigation();
-    this.initClock();
-    this.renderControls();
+    this.initializeLuminance();
+    this.bindVoyageTransitions();
+    this.seedOrbitalMarkers();
+    this.composeActionInterface();
+    this.bindRealmController();
+    this.resurrectPreferences();
     
-    setInterval(() => this.updateClock(), 1000);
+    this.orchestrateTimepieceLoop();
   }
 
-  initTheme() {
-    const theme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', theme);
+  initializeLuminance() {
+    const storedAura = localStorage.getItem('aura_preference_v2') || 'diurnal';
+    document.documentElement.setAttribute('data-luminance', storedAura);
     
-    document.getElementById('themeToggle').addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme');
-      const newTheme = current === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', newTheme);
-      localStorage.setItem('theme', newTheme);
+    const shifterBtn = document.getElementById('luminanceBtn');
+    shifterBtn.addEventListener('click', () => {
+      const currentAura = document.documentElement.getAttribute('data-luminance');
+      const nextAura = currentAura === 'diurnal' ? 'nocturnal' : 'diurnal';
+      document.documentElement.setAttribute('data-luminance', nextAura);
+      localStorage.setItem('aura_preference_v2', nextAura);
     });
   }
 
-  initNavigation() {
-    document.querySelectorAll('.nav button').forEach(button => {
-      button.addEventListener('click', () => {
-        if (button.dataset.mode === this.currentMode) return;
+  bindVoyageTransitions() {
+    const voyageTabs = document.querySelectorAll('.voyage-tab');
+    voyageTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.dataset.voyage === this.activeVoyage) return;
         
-        const container = document.querySelector('.clock-container');
-        container.classList.add('switching');
+        const stage = document.getElementById('horizonStage');
+        stage.classList.add('morphing');
         
+        const morphDuration = 500;
         setTimeout(() => {
-          document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-          button.classList.add('active');
-          this.currentMode = button.dataset.mode;
-          this.stop();
-          this.time = 0;
-          this.clearClockDisplay();
-          this.renderControls();
+          voyageTabs.forEach(t => t.classList.remove('voyage-tab--chosen'));
+          tab.classList.add('voyage-tab--chosen');
+          
+          this.activeVoyage = tab.dataset.voyage;
+          this.haltChronicler();
+          this.haltCountdown();
+          this.elapsedTicks = 0;
+          this.remainingTicks = 0;
+          this.refreshQuantumDisplay();
+          this.composeActionInterface();
           
           setTimeout(() => {
-            container.classList.remove('switching');
-          }, 300);
-        }, 300);
+            stage.classList.remove('morphing');
+          }, 350);
+        }, morphDuration);
       });
     });
   }
 
-  initClock() {
-    const numbers = document.querySelector('.numbers');
-    for (let i = 1; i <= 12; i++) {
-      const number = document.createElement('div');
-      number.className = 'number';
-      number.style.transform = `rotate(${i * 30}deg)`;
-      number.innerHTML = `<span style="transform: rotate(${-i * 30}deg)">${i}</span>`;
-      numbers.appendChild(number);
-    }
-  }
-
-  createScrollColumns() {
-    return `
-      <div class="scroll-digit">
-        <div class="scroll-column hours-tens">
-          ${Array.from({length: 3}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-      <div class="scroll-digit">
-        <div class="scroll-column hours-ones">
-          ${Array.from({length: 10}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-      <span class="divider">:</span>
-      <div class="scroll-digit">
-        <div class="scroll-column minutes-tens">
-          ${Array.from({length: 6}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-      <div class="scroll-digit">
-        <div class="scroll-column minutes-ones">
-          ${Array.from({length: 10}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-      <span class="divider">:</span>
-      <div class="scroll-digit">
-        <div class="scroll-column seconds-tens">
-          ${Array.from({length: 6}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-      <div class="scroll-digit">
-        <div class="scroll-column seconds-ones">
-          ${Array.from({length: 10}, (_, i) => `<div>${i}</div>`).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  updateScrollColumn(type, value) {
-    const tens = Math.floor(value / 10);
-    const ones = value % 10;
+  seedOrbitalMarkers() {
+    const markersContainer = document.getElementById('orbitalMarkers');
+    const clockFaces = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     
-    const tensColumn = document.querySelector(`.${type}-tens`);
-    const onesColumn = document.querySelector(`.${type}-ones`);
+    clockFaces.forEach((numeral, idx) => {
+      const marker = document.createElement('div');
+      marker.className = 'orbital-marker';
+      const rotationDegree = (idx + 1) * 30;
+      marker.style.transform = `rotate(${rotationDegree}deg)`;
+      marker.innerHTML = `<span style="display:inline-block; transform:rotate(${-rotationDegree}deg); margin-top:10px;">${numeral}</span>`;
+      markersContainer.appendChild(marker);
+    });
+  }
+
+  generateFluxStructure() {
+    const segments = [];
     
-    if (tensColumn && onesColumn) {
-      const tensHeight = tensColumn.querySelector('div').offsetHeight;
-      const onesHeight = onesColumn.querySelector('div').offsetHeight;
-      
-      tensColumn.style.transform = `translateY(-${tens * tensHeight}px)`;
-      onesColumn.style.transform = `translateY(-${ones * onesHeight}px)`;
+    segments.push(this.craftFluxPair(3, 'hora'));
+    segments.push('<span class="chrono-separator">:</span>');
+    segments.push(this.craftFluxPair(6, 'momento'));
+    segments.push('<span class="chrono-separator">:</span>');
+    segments.push(this.craftFluxPair(6, 'pulso'));
+    
+    return segments.join('');
+  }
+
+  craftFluxPair(cascadeLimit, identifier) {
+    const majorGlyph = `<div class="flux-glyph">
+      <div class="flux-cascade ${identifier}-major">
+        ${this.buildCascadeSpans(cascadeLimit)}
+      </div>
+    </div>`;
+    
+    const minorGlyph = `<div class="flux-glyph">
+      <div class="flux-cascade ${identifier}-minor">
+        ${this.buildCascadeSpans(10)}
+      </div>
+    </div>`;
+    
+    return majorGlyph + minorGlyph;
+  }
+
+  buildCascadeSpans(limit) {
+    let markup = '';
+    for (let i = 0; i < limit; i++) {
+      markup += `<span>${i}</span>`;
+    }
+    return markup;
+  }
+
+  shiftFluxCascade(cascadeType, numericalValue) {
+    const majorDigit = Math.floor(numericalValue / 10);
+    const minorDigit = numericalValue % 10;
+    
+    const majorCascade = document.querySelector(`.${cascadeType}-major`);
+    const minorCascade = document.querySelector(`.${cascadeType}-minor`);
+    
+    if (majorCascade && minorCascade) {
+      const spanHeight = majorCascade.querySelector('span').offsetHeight;
+      majorCascade.style.transform = `translateY(-${majorDigit * spanHeight}px)`;
+      minorCascade.style.transform = `translateY(-${minorDigit * spanHeight}px)`;
     }
   }
 
-  updateClock() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
-
-    if (this.currentMode === 'clock') {
-      const digitalClock = document.querySelector('.digital-clock');
-      const analogClock = document.querySelector('.analog-clock');
-      
-      if (!digitalClock.querySelector('.scroll-digit')) {
-        digitalClock.innerHTML = this.createScrollColumns();
+  orchestrateTimepieceLoop() {
+    setInterval(() => {
+      if (this.activeVoyage === 'timepiece' && !this.realmEngaged) {
+        this.refreshTimepieceDisplay();
       }
-
-      // Update digital clock
-      requestAnimationFrame(() => {
-        this.updateScrollColumn('hours', hours);
-        this.updateScrollColumn('minutes', minutes);
-        this.updateScrollColumn('seconds', seconds);
-      });
-
-      // Update analog clock
-      const hourDeg = ((hours % 12) * 3600 + minutes * 60 + seconds) * (360 / (12 * 3600));
-      const minuteDeg = (minutes * 60 + seconds) * (360 / (60 * 60));
-      const secondDeg = seconds * (360 / 60);
-
-      if (analogClock) {
-        analogClock.style.display = 'block';
-        requestAnimationFrame(() => {
-          document.querySelector('.hour').style.transform = `rotate(${hourDeg}deg)`;
-          document.querySelector('.minute').style.transform = `rotate(${minuteDeg}deg)`;
-          document.querySelector('.second').style.transform = `rotate(${secondDeg}deg)`;
-        });
+      if (this.realmEngaged) {
+        this.refreshFloatingTimepiece();
       }
-    }
+    }, 1000);
   }
 
-  updateAnalogDisplay() {
-    if (this.currentMode !== 'clock') {
-      const totalSeconds = this.time / 1000;
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = Math.floor(totalSeconds % 60);
-      
-      const hourDeg = (hours % 12) * (360 / 12) + (minutes / 60) * (360 / 12);
-      const minuteDeg = minutes * (360 / 60) + (seconds / 60) * (360 / 60);
-      const secondDeg = seconds * (360 / 60);
+  refreshTimepieceDisplay() {
+    const temporalStamp = new Date();
+    const horaValue = temporalStamp.getHours();
+    const momentoValue = temporalStamp.getMinutes();
+    const pulsoValue = temporalStamp.getSeconds();
 
+    const quantumDisplay = document.getElementById('quantumDisplay');
+    const orbitalCanvas = document.getElementById('orbitalCanvas');
+    
+    if (!quantumDisplay.querySelector('.flux-glyph')) {
+      quantumDisplay.innerHTML = this.generateFluxStructure();
+    }
+
+    requestAnimationFrame(() => {
+      this.shiftFluxCascade('hora', horaValue);
+      this.shiftFluxCascade('momento', momentoValue);
+      this.shiftFluxCascade('pulso', pulsoValue);
+    });
+
+    const totalHoraSeconds = (horaValue % 12) * 3600 + momentoValue * 60 + pulsoValue;
+    const majorArmDegree = (totalHoraSeconds / 43200) * 360;
+    const totalMomentoSeconds = momentoValue * 60 + pulsoValue;
+    const medialArmDegree = (totalMomentoSeconds / 3600) * 360;
+    const swiftArmDegree = (pulsoValue / 60) * 360;
+
+    if (orbitalCanvas) {
+      orbitalCanvas.style.display = 'block';
       requestAnimationFrame(() => {
-        document.querySelector('.hour').style.transform = `rotate(${hourDeg}deg)`;
-        document.querySelector('.minute').style.transform = `rotate(${minuteDeg}deg)`;
-        document.querySelector('.second').style.transform = `rotate(${secondDeg}deg)`;
+        document.querySelector('.orbital-arm--major').style.transform = `rotate(${majorArmDegree}deg)`;
+        document.querySelector('.orbital-arm--medial').style.transform = `rotate(${medialArmDegree}deg)`;
+        document.querySelector('.orbital-arm--swift').style.transform = `rotate(${swiftArmDegree}deg)`;
       });
     }
   }
 
-  start() {
-    if (this.isRunning) return;
-    this.isRunning = true;
+  refreshOrbitalArms() {
+    const ticks = this.activeVoyage === 'chronicler' ? this.elapsedTicks : this.remainingTicks;
+    const totalSeconds = Math.floor(ticks / 1000);
+    const horaSegment = Math.floor(totalSeconds / 3600);
+    const momentoSegment = Math.floor((totalSeconds % 3600) / 60);
+    const pulsoSegment = totalSeconds % 60;
+    
+    const majorDegree = ((horaSegment % 12) / 12) * 360 + (momentoSegment / 60) * 30;
+    const medialDegree = (momentoSegment / 60) * 360 + (pulsoSegment / 60) * 6;
+    const swiftDegree = (pulsoSegment / 60) * 360;
 
-    if (this.currentMode === 'stopwatch') {
-      let lastTime = performance.now();
-      this.interval = setInterval(() => {
-        const currentTime = performance.now();
-        const delta = currentTime - lastTime;
-        lastTime = currentTime;
-        this.time += delta;
-        this.updateDisplay();
-        this.updateAnalogDisplay();
-      }, 16);
-    } else if (this.currentMode === 'timer') {
-      if (this.time <= 0) return;
-      let lastTime = performance.now();
-      this.interval = setInterval(() => {
-        const currentTime = performance.now();
-        const delta = currentTime - lastTime;
-        lastTime = currentTime;
-        this.time = Math.max(0, this.time - delta);
-        if (this.time <= 0) {
-          this.stop();
-          alert('Timer finished!');
-        }
-        this.updateDisplay();
-        this.updateAnalogDisplay();
-      }, 16);
+    requestAnimationFrame(() => {
+      document.querySelector('.orbital-arm--major').style.transform = `rotate(${majorDegree}deg)`;
+      document.querySelector('.orbital-arm--medial').style.transform = `rotate(${medialDegree}deg)`;
+      document.querySelector('.orbital-arm--swift').style.transform = `rotate(${swiftDegree}deg)`;
+    });
+  }
+
+  initiateChronicler() {
+    if (this.chroniclerActive) return;
+    this.chroniclerActive = true;
+
+    this.lastFrameStamp = performance.now();
+    const recurse = (timestamp) => {
+      if (!this.chroniclerActive) return;
+      
+      const deltaMs = timestamp - this.lastFrameStamp;
+      this.lastFrameStamp = timestamp;
+      this.elapsedTicks += deltaMs;
+      
+      this.refreshQuantumDisplay();
+      this.refreshOrbitalArms();
+      this.rafHandle = requestAnimationFrame(recurse);
+    };
+    this.rafHandle = requestAnimationFrame(recurse);
+  }
+
+  haltChronicler() {
+    this.chroniclerActive = false;
+    if (this.rafHandle) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = null;
     }
   }
 
-  stop() {
-    this.isRunning = false;
-    clearInterval(this.interval);
+  initiateCountdown() {
+    if (this.remainingTicks <= 0) return;
+    if (this.countdownActive) return;
+    this.countdownActive = true;
+
+    this.lastFrameStamp = performance.now();
+    const recurse = (timestamp) => {
+      if (!this.countdownActive) return;
+      
+      const deltaMs = timestamp - this.lastFrameStamp;
+      this.lastFrameStamp = timestamp;
+      this.remainingTicks = Math.max(0, this.remainingTicks - deltaMs);
+      
+      if (this.remainingTicks <= 0) {
+        this.haltCountdown();
+        this.triggerCountdownAlert();
+      }
+      
+      this.refreshQuantumDisplay();
+      this.refreshOrbitalArms();
+      this.rafHandle = requestAnimationFrame(recurse);
+    };
+    this.rafHandle = requestAnimationFrame(recurse);
   }
 
-  reset() {
-    this.stop();
-    this.time = 0;
-    this.updateDisplay();
+  haltCountdown() {
+    this.countdownActive = false;
+    if (this.rafHandle) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = null;
+    }
   }
 
-  updateDisplay() {
-    const digitalClock = document.querySelector('.digital-clock');
-    
-    if (this.currentMode === 'clock') {
-      this.updateClock();
+  triggerCountdownAlert() {
+    const alertMsg = '⏰ Countdown Complete!';
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(alertMsg);
     } else {
-      if (!this.time && !this.isRunning) {
-        this.clearClockDisplay();
-      } else {
-        const milliseconds = String(Math.floor((this.time % 1000) / 10)).padStart(2, '0');
-        const seconds = String(Math.floor((this.time / 1000) % 60)).padStart(2, '0');
-        const minutes = String(Math.floor((this.time / 60000) % 60)).padStart(2, '0');
-        const hours = String(Math.floor(this.time / 3600000)).padStart(2, '0');
+      alert(alertMsg);
+    }
+  }
 
-        digitalClock.innerHTML = `
-          <span>${hours}</span>
-          <span class="divider">:</span>
-          <span>${minutes}</span>
-          <span class="divider">:</span>
-          <span>${seconds}</span>
-          ${this.currentMode === 'stopwatch' ? `<span class="milliseconds">.${milliseconds}</span>` : ''}
+  resetChronicler() {
+    this.haltChronicler();
+    this.elapsedTicks = 0;
+    this.refreshQuantumDisplay();
+    this.refreshOrbitalArms();
+  }
+
+  resetCountdown() {
+    this.haltCountdown();
+    this.remainingTicks = 0;
+    this.refreshQuantumDisplay();
+    this.refreshOrbitalArms();
+  }
+
+  refreshQuantumDisplay() {
+    const quantumDisplay = document.getElementById('quantumDisplay');
+    
+    if (this.activeVoyage === 'timepiece') {
+      this.refreshTimepieceDisplay();
+    } else {
+      const tickValue = this.activeVoyage === 'chronicler' ? this.elapsedTicks : this.remainingTicks;
+      
+      if (tickValue === 0 && !this.chroniclerActive && !this.countdownActive) {
+        this.renderNullState();
+      } else {
+        const fractionMs = String(Math.floor((tickValue % 1000) / 10)).padStart(2, '0');
+        const pulsos = String(Math.floor((tickValue / 1000) % 60)).padStart(2, '0');
+        const momentos = String(Math.floor((tickValue / 60000) % 60)).padStart(2, '0');
+        const horas = String(Math.floor(tickValue / 3600000)).padStart(2, '0');
+
+        const fractionMarkup = this.activeVoyage === 'chronicler' 
+          ? `<span class="fraction-display">.${fractionMs}</span>` 
+          : '';
+
+        quantumDisplay.innerHTML = `
+          <span>${horas}</span>
+          <span class="chrono-separator">:</span>
+          <span>${momentos}</span>
+          <span class="chrono-separator">:</span>
+          <span>${pulsos}</span>
+          ${fractionMarkup}
         `;
         
-        this.updateAnalogDisplay();
+        this.refreshOrbitalArms();
       }
     }
   }
 
-  clearClockDisplay() {
-    const digitalClock = document.querySelector('.digital-clock');
-    const analogClock = document.querySelector('.analog-clock');
+  renderNullState() {
+    const quantumDisplay = document.getElementById('quantumDisplay');
+    const fractionMarkup = this.activeVoyage === 'chronicler' 
+      ? '<span class="fraction-display">.00</span>' 
+      : '';
+
+    quantumDisplay.innerHTML = `
+      <span>00</span>
+      <span class="chrono-separator">:</span>
+      <span>00</span>
+      <span class="chrono-separator">:</span>
+      <span>00</span>
+      ${fractionMarkup}
+    `;
     
-    if (this.currentMode !== 'clock') {
-      digitalClock.innerHTML = `
-        <span>00</span>
-        <span class="divider">:</span>
-        <span>00</span>
-        <span class="divider">:</span>
-        <span>00</span>
-        ${this.currentMode === 'stopwatch' ? '<span class="milliseconds">.00</span>' : ''}
-      `;
+    requestAnimationFrame(() => {
+      document.querySelector('.orbital-arm--major').style.transform = 'rotate(0deg)';
+      document.querySelector('.orbital-arm--medial').style.transform = 'rotate(0deg)';
+      document.querySelector('.orbital-arm--swift').style.transform = 'rotate(0deg)';
+    });
+  }
+
+  composeActionInterface() {
+    const actionBay = document.getElementById('actionBay');
+    actionBay.innerHTML = '';
+
+    if (this.activeVoyage === 'chronicler') {
+      const startBtn = document.createElement('button');
+      startBtn.textContent = 'Initiate';
+      startBtn.onclick = () => this.initiateChronicler();
       
-      // Reset analog clock to zero position
-      requestAnimationFrame(() => {
-        document.querySelector('.hour').style.transform = 'rotate(0deg)';
-        document.querySelector('.minute').style.transform = 'rotate(0deg)';
-        document.querySelector('.second').style.transform = 'rotate(0deg)';
+      const haltBtn = document.createElement('button');
+      haltBtn.textContent = 'Suspend';
+      haltBtn.onclick = () => this.haltChronicler();
+      
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Nullify';
+      resetBtn.onclick = () => this.resetChronicler();
+      
+      actionBay.appendChild(startBtn);
+      actionBay.appendChild(haltBtn);
+      actionBay.appendChild(resetBtn);
+    } else if (this.activeVoyage === 'countdown') {
+      const configurator = document.createElement('div');
+      configurator.className = 'interval-configurator';
+      
+      const segments = [
+        { label: 'Horas', id: 'horaInput', max: 99 },
+        { label: 'Momentos', id: 'momentoInput', max: 59 },
+        { label: 'Pulsos', id: 'pulsoInput', max: 59 }
+      ];
+      
+      segments.forEach(seg => {
+        const segment = document.createElement('div');
+        segment.className = 'interval-segment';
+        
+        const label = document.createElement('label');
+        label.textContent = seg.label;
+        
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'interval-input';
+        input.id = seg.id;
+        input.min = '0';
+        input.max = String(seg.max);
+        input.placeholder = '00';
+        input.addEventListener('input', () => this.recalculateCountdown());
+        
+        segment.appendChild(label);
+        segment.appendChild(input);
+        configurator.appendChild(segment);
       });
+      
+      const startBtn = document.createElement('button');
+      startBtn.textContent = 'Commence';
+      startBtn.onclick = () => this.initiateCountdown();
+      
+      const haltBtn = document.createElement('button');
+      haltBtn.textContent = 'Suspend';
+      haltBtn.onclick = () => this.haltCountdown();
+      
+      const resetBtn = document.createElement('button');
+      resetBtn.textContent = 'Nullify';
+      resetBtn.onclick = () => this.resetCountdown();
+      
+      actionBay.appendChild(configurator);
+      actionBay.appendChild(startBtn);
+      actionBay.appendChild(haltBtn);
+      actionBay.appendChild(resetBtn);
     }
   }
 
-  renderControls() {
-    const controls = document.querySelector('.controls');
-    controls.innerHTML = '';
-
-    if (this.currentMode === 'stopwatch') {
-      controls.innerHTML = `
-        <button onclick="app.start()">Start</button>
-        <button onclick="app.stop()">Stop</button>
-        <button onclick="app.reset()">Reset</button>
-      `;
-    } else if (this.currentMode === 'timer') {
-      controls.innerHTML = `
-        <div class="timer-inputs">
-          <div class="timer-input-group">
-            <label>Hours</label>
-            <input type="number" class="timer-input" min="0" max="99" placeholder="HH" onchange="app.updateTimer()">
-          </div>
-          <div class="timer-input-group">
-            <label>Minutes</label>
-            <input type="number" class="timer-input" min="0" max="59" placeholder="MM" onchange="app.updateTimer()">
-          </div>
-          <div class="timer-input-group">
-            <label>Seconds</label>
-            <input type="number" class="timer-input" min="0" max="59" placeholder="SS" onchange="app.updateTimer()">
-          </div>
-        </div>
-        <button onclick="app.start()">Start</button>
-        <button onclick="app.stop()">Stop</button>
-        <button onclick="app.reset()">Reset</button>
-      `;
-    }
+  recalculateCountdown() {
+    const horaInput = document.getElementById('horaInput');
+    const momentoInput = document.getElementById('momentoInput');
+    const pulsoInput = document.getElementById('pulsoInput');
+    
+    const horas = parseInt(horaInput?.value) || 0;
+    const momentos = parseInt(momentoInput?.value) || 0;
+    const pulsos = parseInt(pulsoInput?.value) || 0;
+    
+    this.remainingTicks = (horas * 3600 + momentos * 60 + pulsos) * 1000;
+    this.refreshQuantumDisplay();
   }
 
-  updateTimer() {
-    const inputs = document.querySelectorAll('.timer-input');
-    const [hours, minutes, seconds] = [...inputs].map(input => parseInt(input.value) || 0);
-    this.time = (hours * 3600 + minutes * 60 + seconds) * 1000;
-    this.updateDisplay();
+  bindRealmController() {
+    const realmBtn = document.getElementById('realmBtn');
+    const realmOverlay = document.getElementById('realmOverlay');
+    
+    realmBtn.addEventListener('click', () => this.engageRealm());
+    
+    const exitTriggers = ['click', 'keydown', 'mousemove', 'touchstart'];
+    exitTriggers.forEach(eventType => {
+      realmOverlay.addEventListener(eventType, (e) => {
+        if (this.realmEngaged) {
+          this.disengageRealm();
+        }
+      }, { once: false });
+    });
+    
+    realmOverlay.addEventListener('mousemove', () => {
+      if (this.realmEngaged) {
+        this.scheduleCursorFade();
+      }
+    });
+  }
+
+  engageRealm() {
+    this.realmEngaged = true;
+    const realmOverlay = document.getElementById('realmOverlay');
+    realmOverlay.classList.add('realm-active');
+    
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    
+    localStorage.setItem('realm_preference_v2', 'engaged');
+    this.refreshFloatingTimepiece();
+    this.scheduleCursorFade();
+  }
+
+  disengageRealm() {
+    this.realmEngaged = false;
+    const realmOverlay = document.getElementById('realmOverlay');
+    realmOverlay.classList.remove('realm-active');
+    document.body.classList.remove('pointer-hidden');
+    
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    
+    if (this.cursorFadeTimer) {
+      clearTimeout(this.cursorFadeTimer);
+      this.cursorFadeTimer = null;
+    }
+    
+    localStorage.setItem('realm_preference_v2', 'disengaged');
+  }
+
+  scheduleCursorFade() {
+    document.body.classList.remove('pointer-hidden');
+    
+    if (this.cursorFadeTimer) {
+      clearTimeout(this.cursorFadeTimer);
+    }
+    
+    this.cursorFadeTimer = setTimeout(() => {
+      document.body.classList.add('pointer-hidden');
+    }, 3000);
+  }
+
+  refreshFloatingTimepiece() {
+    const floatingTimepiece = document.getElementById('floatingTimepiece');
+    const now = new Date();
+    const horas = String(now.getHours()).padStart(2, '0');
+    const momentos = String(now.getMinutes()).padStart(2, '0');
+    const pulsos = String(now.getSeconds()).padStart(2, '0');
+    
+    floatingTimepiece.textContent = `${horas}:${momentos}:${pulsos}`;
+  }
+
+  resurrectPreferences() {
+    const realmPref = localStorage.getItem('realm_preference_v2');
+    if (realmPref === 'engaged') {
+    }
   }
 }
 
-const app = new ClockApp();
+const orchestrator = new TemporalOrchestrator();
