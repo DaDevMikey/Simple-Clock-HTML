@@ -70,7 +70,7 @@ class TemporalOrchestrator {
     clockFaces.forEach((numeral, idx) => {
       const marker = document.createElement('div');
       marker.className = 'orbital-marker';
-      const rotationDegree = (idx + 1) * 30;
+      const rotationDegree = idx * 30;
       marker.style.transform = `rotate(${rotationDegree}deg)`;
       marker.innerHTML = `<span style="display:inline-block; transform:rotate(${-rotationDegree}deg); margin-top:10px;">${numeral}</span>`;
       markersContainer.appendChild(marker);
@@ -419,7 +419,7 @@ class TemporalOrchestrator {
     
     realmBtn.addEventListener('click', () => this.engageRealm());
     
-    const exitTriggers = ['click', 'keydown', 'mousemove', 'touchstart'];
+    const exitTriggers = ['click', 'keydown', 'touchstart'];
     exitTriggers.forEach(eventType => {
       realmOverlay.addEventListener(eventType, (e) => {
         if (this.realmEngaged) {
@@ -490,9 +490,6 @@ class TemporalOrchestrator {
   }
 
   resurrectPreferences() {
-    const realmPref = localStorage.getItem('realm_preference_v2');
-    if (realmPref === 'engaged') {
-    }
   }
 }
 
